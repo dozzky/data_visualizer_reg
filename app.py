@@ -140,7 +140,7 @@ if uploaded_file:
         for shift in ["1 смена (07-19)", "2 смена (19-07)"]:
             avg_shift = kisvr_df[kisvr_df["Смена"] == shift]["Коэф. использования по времени (Кисвр)"].mean()
             avg_shift = round(avg_shift, 3) if not pd.isna(avg_shift) else 0
-            st.metric(f"Среднее значение Кисвр по {shift} смене", avg_shift)
+            st.metric(f"Среднее значение Кисвр по {shift}", avg_shift)
             
         # -------------------
         # Кнопка для построения графиков
