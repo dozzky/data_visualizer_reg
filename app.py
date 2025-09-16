@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 from datetime import datetime
+import plotly.express as px
 
 st.set_page_config(page_title="Анализ работы оборудования", layout="wide")
 
@@ -65,7 +66,7 @@ if uploaded_file:
         T_k = days_count * 24
 
         # --- Ккф: считаем агрегировано по оборудованию ---
-        for equip, group in filtered_df.groupby("Оборудование"):
+        for (equip, date), group in filtered_df.groupby(["Оборудование", filtered_df["Дата"].dt.date]):
             T_f = 0
 
             for _, row in group.iterrows():
@@ -76,17 +77,18 @@ if uploaded_file:
                 # Фактическое время (двигатель включен)
                 T_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
 
-            K_kf = T_f / T_k if T_k > 0 else 0
+            K_kf = T_f / 24 if 24 > 0 else 0  # по суткам
 
             kkf_results.append({
                 "Оборудование": equip,
-                "Календарный фонд (Тк), ч": round(T_k, 2),
+                "Дата": date,
+                "Календарный фонд (Тк), ч": 24,
                 "Фактическое время работы (Тф), ч": round(T_f, 2),
                 "Коэф. использования календарного фонда (Ккф)": round(K_kf, 3),
             })
 
-        # --- Кисвр: считаем отдельно по каждой смене ---
-        for (equip, shift), group in filtered_df.groupby(["Оборудование", "Смена"]):
+        # --- Кисвр: считаем отдельно по каждой смене и дате ---
+        for (equip, shift, date), group in filtered_df.groupby(["Оборудование", "Смена", filtered_df["Дата"].dt.date]):
             T_sm = 0
             T_sm_f = 0
 
@@ -103,18 +105,47 @@ if uploaded_file:
             kisvr_results.append({
                 "Оборудование": equip,
                 "Смена": shift,
+                "Дата": date,
                 "Суммарное время (Тсм), ч": round(T_sm, 2),
                 "Рабочее время в смене (Тсмф), ч": round(T_sm_f, 2),
                 "Коэф. использования по времени (Кисвр)": round(K_is_vr, 3),
             })
 
+        kkf_df = pd.DataFrame(kkf_results)
+        kisvr_df = pd.DataFrame(kisvr_results)
+
         # Выводим таблицы
         st.subheader("📊 Таблица: Коэф. использования календарного фонда (Ккф)")
-        st.dataframe(pd.DataFrame(kkf_results))
+        st.dataframe(kkf_df)
 
         st.subheader("📊 Таблица: Коэф. использования сменного времени (Кисвр)")
-        st.dataframe(pd.DataFrame(kisvr_results))
+        st.dataframe(kisvr_df)
 
+        # -------------------
+        # Визуализация
+        # -------------------
+        st.subheader("📈 График: Ккф по дням")
+        fig_kkf = px.line(
+            kkf_df,
+            x="Дата",
+            y="Коэф. использования календарного фонда (Ккф)",
+            color="Оборудование",
+            markers=True,
+            title="Динамика Ккф по дням"
+        )
+        st.plotly_chart(fig_kkf, use_container_width=True)
+
+        st.subheader("📈 График: Кисвр по дням и сменам")
+        fig_kisvr = px.line(
+            kisvr_df,
+            x="Дата",
+            y="Коэф. использования по времени (Кисвр)",
+            color="Оборудование",
+            line_dash="Смена",
+            markers=True,
+            title="Динамика Кисвр по дням и сменам"
+        )
+        st.plotly_chart(fig_kisvr, use_container_width=True)
 
     else:
         st.warning("Нет данных для выбранных фильтров")
