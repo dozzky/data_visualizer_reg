@@ -8,13 +8,11 @@ st.set_page_config(page_title="Анализ работы оборудовани�
 
 st.title("📊 Анализ работы оборудования")
 
-# Загрузка JSON файла
 uploaded_file = st.file_uploader("Загрузите JSON файл", type="json")
 
 if uploaded_file:
     data = json.load(uploaded_file)
     
-    # Нормализуем JSON
     if isinstance(data, dict):
         df = pd.json_normalize(data)
     elif isinstance(data, list):
@@ -23,40 +21,30 @@ if uploaded_file:
         st.error("Некорректный формат JSON")
         st.stop()
     
-    # Преобразуем дату
     df["Дата"] = pd.to_datetime(df["Дата"], errors="coerce")
 
-    # -------------------
-    # Фильтры
-    # -------------------
     st.sidebar.header("Фильтры")
 
     min_date = df["Дата"].min().date()
     max_date = df["Дата"].max().date()
     period = st.sidebar.date_input("Период", [min_date, max_date])
 
-    смена = st.sidebar.multiselect("Смена", df["Смена"].unique())
-    оборудование = st.sidebar.multiselect("Оборудование", df["Оборудование"].unique())
-    топливо = st.sidebar.multiselect("Топливо", df["Топливо"].unique())
+    sb_shift = st.sidebar.multiselect("Смена", df["Смена"].unique())
+    sb_machinery = st.sidebar.multiselect("Оборудование", df["Оборудование"].unique())
+    sb_fuel = st.sidebar.multiselect("Топливо", df["Топливо"].unique())
 
-    # Слайдер для сглаживания
     smoothing_window = st.sidebar.slider("Сглаживание (кол-во дней)", 1, 10, 1)
 
-    # Применяем фильтры
     filtered_df = df.copy()
     if len(period) == 2:
         start, end = period
         filtered_df = filtered_df[(filtered_df["Дата"].dt.date >= start) & (filtered_df["Дата"].dt.date <= end)]
-    if смена:
-        filtered_df = filtered_df[filtered_df["Смена"].isin(смена)]
-    if оборудование:
-        filtered_df = filtered_df[filtered_df["Оборудование"].isin(оборудование)]
-    if топливо:
-        filtered_df = filtered_df[filtered_df["Топливо"].isin(топливо)]
-
-    # -------------------
-    # Расчеты по оборудованию
-    # -------------------
+    if sb_shift:
+        filtered_df = filtered_df[filtered_df["Смена"].isin(sb_shift)]
+    if sb_machinery:
+        filtered_df = filtered_df[filtered_df["Оборудование"].isin(sb_machinery)]
+    if sb_fuel:
+        filtered_df = filtered_df[filtered_df["Топливо"].isin(sb_fuel)]
 
     st.subheader("Отфильтрованные данные")
     with st.expander("📊 Таблица: Все данные"):
@@ -70,7 +58,7 @@ if uploaded_file:
         days_count = filtered_df["Дата"].dt.date.nunique()
         T_k = days_count * 24
 
-        # --- Ккф по дате и оборудованию ---
+        # Ккф по дате и оборудованию
         for (equip, date), group in filtered_df.groupby(["Оборудование", filtered_df["Дата"].dt.date]):
             T_f = 0
             for _, row in group.iterrows():
@@ -87,7 +75,7 @@ if uploaded_file:
                 "Коэф. использования календарного фонда (Ккф)": round(K_kf, 3),
             })
 
-        # --- Кисвр по дате, смене и оборудованию ---
+        # Кисвр по дате, смене и оборудованию
         for (equip, shift, date), group in filtered_df.groupby(["Оборудование", "Смена", filtered_df["Дата"].dt.date]):
             T_sm = 0
             T_sm_f = 0
@@ -110,18 +98,12 @@ if uploaded_file:
         kkf_df = pd.DataFrame(kkf_results)
         kisvr_df = pd.DataFrame(kisvr_results)
 
-        # -------------------
-        # Скрытые таблицы через expander
-        # -------------------
         with st.expander("📊 Таблица: Ккф по дням"):
             st.dataframe(kkf_df)
 
         with st.expander("📊 Таблица: Кисвр по дням и сменам"):
             st.dataframe(kisvr_df)
 
-        # -------------------
-        # Средние значения
-        # -------------------
         st.subheader("📌 Средние значения за выбранный период")
 
         # Среднее Ккф по оборудованию
@@ -141,16 +123,12 @@ if uploaded_file:
         overall_avg_kkf = round(kkf_df["Коэф. использования календарного фонда (Ккф)"].mean(), 3)
         cols_avg[0].metric("Среднее значение Ккф", overall_avg_kkf)
         
-        # Среднее Кисвр по сменам
         shifts = ["1 смена (07-19)", "2 смена (19-07)"]
         for i, shift in enumerate(shifts):
             avg_shift = kisvr_df[kisvr_df["Смена"] == shift]["Коэф. использования по времени (Кисвр)"].mean()
             avg_shift = round(avg_shift, 3) if not pd.isna(avg_shift) else 0
             cols_avg[i+1].metric(f"Среднее значение Кисвр по {shift}", avg_shift)
             
-        # -------------------
-        # Кнопка для построения графиков
-        # -------------------
         st.subheader("📅 Вывести графики по дням")
         col_graphs = st.columns(2)
         if col_graphs[0].button("Построить графики (среднее значение)"):
