@@ -124,14 +124,14 @@ if uploaded_file:
         # Среднее Ккф по оборудованию
         avg_kkf = kkf_df.groupby("Оборудование")["Коэф. использования календарного фонда (Ккф)"].mean().reset_index()
         avg_kkf.rename(columns={"Коэф. использования календарного фонда (Ккф)": "Среднее Ккф"}, inplace=True)
-        st.write("Среднее Ккф по оборудованию:")
-        st.dataframe(avg_kkf)
+        with st.expander("Среднее Ккф по оборудованию:"):
+            st.dataframe(avg_kkf)
 
         # Среднее Кисвр по сменам
         avg_kisvr = kisvr_df.groupby(["Оборудование", "Смена"])["Коэф. использования по времени (Кисвр)"].mean().reset_index()
         avg_kisvr.rename(columns={"Коэф. использования по времени (Кисвр)": "Среднее Кисвр"}, inplace=True)
-        st.write("Среднее Кисвр по сменам:")
-        st.dataframe(avg_kisvr)
+        with st.expander("Среднее Кисвр по сменам:"):
+            st.dataframe(avg_kisvr)
 
         # -------------------
         # Кнопка для построения графиков
