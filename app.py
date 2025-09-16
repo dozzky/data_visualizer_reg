@@ -164,7 +164,8 @@ if uploaded_file:
             avg_kisvr_shift2 = kisvr_df[kisvr_df["Смена"] == "2 смена (19-07)"].groupby("Дата")["Коэф. использования по времени (Кисвр)"].mean().reset_index()
             
             avg_kisvr_per_day_shift = pd.concat([avg_kisvr_shift1, avg_kisvr_shift2], ignore_index=True)
-            
+            avg_kisvr_per_day_shift["Дата"] = pd.to_datetime(avg_kisvr_per_day_shift["Дата"], errors="coerce")
+
             fig_avg_kisvr = px.line(
                 avg_kisvr_per_day_shift,
                 x="Дата",
