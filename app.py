@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 
 st.set_page_config(page_title="Анализ работы оборудования", layout="wide")
 
@@ -54,40 +54,49 @@ if uploaded_file:
     st.dataframe(filtered_df)
 
     # -------------------
-    # Расчеты
+    # Расчеты по оборудованию
     # -------------------
-
     if not filtered_df.empty:
-        # --- Тк ---
+        results = []
+
+        # Календарный фонд (одинаков для всех)
         days_count = (filtered_df["Дата"].dt.date.nunique())
-        T_k = days_count * 24  # календарный фонд времени
+        T_k = days_count * 24
 
-        # --- Тф ---
-        T_f = 0
-        T_sm = 0
-        T_sm_f = 0
+        for equip, group in filtered_df.groupby("Оборудование"):
+            T_f = 0
+            T_sm = 0
+            T_sm_f = 0
 
-        for idx, row in filtered_df.iterrows():
-            durations = [datetime.fromisoformat(x) for x in row["ПоказателиОборудованияПоУчасткамПродолжительность"]]
-            durations_hours = [(d.hour + d.minute/60) for d in durations]
+            for idx, row in group.iterrows():
+                durations = [datetime.fromisoformat(x) for x in row["ПоказателиОборудованияПоУчасткамПродолжительность"]]
+                durations_hours = [(d.hour + d.minute/60) for d in durations]
+                includes = row["ПоказателиОборудованияПоУчасткамВключенДвигатель"]
 
-            includes = row["ПоказателиОборудованияПоУчасткамВключенДвигатель"]
+                # Сумма всех продолжительностей
+                T_sm += sum(durations_hours)
+                # Сумма, когда двигатель включен
+                T_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
+                T_sm_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
 
-            # Сумма всех продолжительностей
-            T_sm += sum(durations_hours)
-            # Сумма, когда двигатель включен
-            T_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
-            T_sm_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
+            # Коэффициенты
+            K_kf = T_f / T_k if T_k > 0 else 0
+            K_is_vr = T_sm_f / T_sm if T_sm > 0 else 0
 
-        # --- Коэффициенты ---
-        K_kf = T_f / T_k if T_k > 0 else 0
-        K_is_vr = T_sm_f / T_sm if T_sm > 0 else 0
+            results.append({
+                "Оборудование": equip,
+                "Календарный фонд (Тк), ч": round(T_k, 2),
+                "Фактическое время работы (Тф), ч": round(T_f, 2),
+                "Суммарное время (Тсм), ч": round(T_sm, 2),
+                "Рабочее время в смене (Тсмф), ч": round(T_sm_f, 2),
+                "Коэф. использования календарного фонда (Ккф)": round(K_kf, 3),
+                "Коэф. использования по времени (Кисвр)": round(K_is_vr, 3),
+            })
 
-        # --- Вывод ---
-        st.subheader("📈 Расчеты")
-        st.metric("Календарный фонд времени (Тк), ч", f"{T_k:.2f}")
-        st.metric("Коэффициент использования календарного фонда (Ккф)", f"{K_kf:.3f}")
-        st.metric("Коэффициент использования оборудования по времени (Кисвр)", f"{K_is_vr:.3f}")
+        results_df = pd.DataFrame(results)
+
+        st.subheader("📈 Расчеты по оборудованию")
+        st.dataframe(results_df)
 
     else:
         st.warning("Нет данных для выбранных фильтров")
