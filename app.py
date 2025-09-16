@@ -29,9 +29,9 @@ if uploaded_file:
     max_date = df["Дата"].max().date()
     period = st.sidebar.date_input("Период", [min_date, max_date])
 
-    sb_shift = st.sidebar.multiselect("Смена", df["Смена"].unique())
-    sb_machinery = st.sidebar.multiselect("Оборудование", df["Оборудование"].unique())
-    sb_fuel = st.sidebar.multiselect("Топливо", df["Топливо"].unique())
+    смена = st.sidebar.multiselect("Смена", df["Смена"].unique())
+    оборудование = st.sidebar.multiselect("Оборудование", df["Оборудование"].unique())
+    топливо = st.sidebar.multiselect("Топливо", df["Топливо"].unique())
 
     smoothing_window = st.sidebar.slider("Сглаживание (кол-во дней)", 1, 10, 1)
 
@@ -39,12 +39,12 @@ if uploaded_file:
     if len(period) == 2:
         start, end = period
         filtered_df = filtered_df[(filtered_df["Дата"].dt.date >= start) & (filtered_df["Дата"].dt.date <= end)]
-    if sb_shift:
-        filtered_df = filtered_df[filtered_df["Смена"].isin(sb_shift)]
-    if sb_machinery:
-        filtered_df = filtered_df[filtered_df["Оборудование"].isin(sb_machinery)]
-    if sb_fuel:
-        filtered_df = filtered_df[filtered_df["Топливо"].isin(sb_fuel)]
+    if смена:
+        filtered_df = filtered_df[filtered_df["Смена"].isin(смена)]
+    if оборудование:
+        filtered_df = filtered_df[filtered_df["Оборудование"].isin(оборудование)]
+    if топливо:
+        filtered_df = filtered_df[filtered_df["Топливо"].isin(топливо)]
 
     st.subheader("Отфильтрованные данные")
     with st.expander("📊 Таблица: Все данные"):
