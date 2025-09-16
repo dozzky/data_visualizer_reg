@@ -54,6 +54,11 @@ if uploaded_file:
     # -------------------
     # Расчеты по оборудованию
     # -------------------
+
+    st.subheader("Отфильтрованные данные")
+    with st.expander("📊 Таблица: Все данные"):
+        st.dataframe(filtered_df)
+    
     if not filtered_df.empty:
         kkf_results = []
         kisvr_results = []
