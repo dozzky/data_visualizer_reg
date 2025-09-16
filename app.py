@@ -139,6 +139,7 @@ if uploaded_file:
         cols_avg[0].metric("Среднее значение Ккф", overall_avg_kkf)
         
         # Среднее Кисвр по сменам
+        shifts = ["1 смена (07-19)", "2 смена (19-07)"]
         for i, shift in enumerate(shifts):
             avg_shift = kisvr_df[kisvr_df["Смена"] == shift]["Коэф. использования по времени (Кисвр)"].mean()
             avg_shift = round(avg_shift, 3) if not pd.isna(avg_shift) else 0
