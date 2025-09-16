@@ -118,16 +118,18 @@ if uploaded_file:
         with st.expander("Среднее Кисвр по сменам:"):
             st.dataframe(avg_kisvr)
             
-        cols_avg = st.columns(3)
+        cols_avg = st.columns(4)
         
         overall_avg_kkf = round(kkf_df["Коэф. использования календарного фонда (Ккф)"].mean(), 3)
-        cols_avg[0].metric("Среднее значение Ккф", overall_avg_kkf)
+        
+        cols_avg[0].metric("Календарный фонд времени Тк", filtered_df["Дата"].dt.date)
+        cols_avg[1].metric("Среднее значение Ккф", overall_avg_kkf)
         
         shifts = ["1 смена (07-19)", "2 смена (19-07)"]
         for i, shift in enumerate(shifts):
             avg_shift = kisvr_df[kisvr_df["Смена"] == shift]["Коэф. использования по времени (Кисвр)"].mean()
             avg_shift = round(avg_shift, 3) if not pd.isna(avg_shift) else 0
-            cols_avg[i+1].metric(f"Среднее значение Кисвр по {shift}", avg_shift)
+            cols_avg[i+2].metric(f"Среднее значение Кисвр по {shift}", avg_shift)
             
         st.subheader("📅 Вывести графики по дням")
         col_graphs = st.columns(2)
