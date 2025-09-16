@@ -132,15 +132,17 @@ if uploaded_file:
         avg_kisvr.rename(columns={"Коэф. использования по времени (Кисвр)": "Среднее Кисвр"}, inplace=True)
         with st.expander("Среднее Кисвр по сменам:"):
             st.dataframe(avg_kisvr)
-
+            
+        cols_avg = st.columns(3)
+        
         overall_avg_kkf = round(kkf_df["Коэф. использования календарного фонда (Ккф)"].mean(), 3)
-        st.metric("Среднее значение Ккф", overall_avg_kkf)
+        cols_avg[0].metric("Среднее значение Ккф", overall_avg_kkf)
         
         # Среднее Кисвр по сменам
         for shift in ["1 смена (07-19)", "2 смена (19-07)"]:
             avg_shift = kisvr_df[kisvr_df["Смена"] == shift]["Коэф. использования по времени (Кисвр)"].mean()
             avg_shift = round(avg_shift, 3) if not pd.isna(avg_shift) else 0
-            st.metric(f"Среднее значение Кисвр по {shift}", avg_shift)
+            cols_avg[i+1].metric(f"Среднее значение Кисвр по {shift}", avg_shift)
             
         # -------------------
         # Кнопка для построения графиков
