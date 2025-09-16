@@ -122,7 +122,8 @@ if uploaded_file:
         
         overall_avg_kkf = round(kkf_df["Коэф. использования календарного фонда (Ккф)"].mean(), 3)
         
-        cols_avg[0].metric("Календарный фонд времени Тк", period)
+        days = (period[1] - period[0]).days + 1
+        cols_avg[0].metric("Календарный фонд времени Тк", days*24)
         cols_avg[1].metric("Среднее значение Ккф", overall_avg_kkf)
         
         shifts = ["1 смена (07-19)", "2 смена (19-07)"]
