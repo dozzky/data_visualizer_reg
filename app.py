@@ -1,102 +1,79 @@
 import streamlit as st
 import pandas as pd
 import json
-from datetime import datetime
+import altair as alt
+import numpy as np
+from datetime import datetime, timedelta
+from typing import Any
 
-st.set_page_config(page_title="Анализ работы оборудования", layout="wide")
 
-st.title("📊 Анализ работы оборудования")
+st.set_page_config(page_title="Анализ работы оборудования — по сменам", layout="wide")
 
-# Загрузка JSON файла
-uploaded_file = st.file_uploader("Загрузите JSON файл", type="json")
 
-if uploaded_file:
-    data = json.load(uploaded_file)
-    
-    # Если загружен список объектов - нормализуем
-    if isinstance(data, dict):
-        df = pd.json_normalize(data)
-    elif isinstance(data, list):
-        df = pd.json_normalize(data)
-    else:
-        st.error("Некорректный формат JSON")
-        st.stop()
-    
-    # Преобразуем дату
-    df["Дата"] = pd.to_datetime(df["Дата"], errors="coerce")
+st.title("📊 Анализ использования оборудования — Ккф и Кисвр (по сменам)")
 
-    # Фильтры
-    st.sidebar.header("Фильтры")
 
-    min_date = df["Дата"].min().date()
-    max_date = df["Дата"].max().date()
-    period = st.sidebar.date_input("Период", [min_date, max_date])
+# ---------------------------
+# Утилиты
+# ---------------------------
 
-    смена = st.sidebar.multiselect("Смена", df["Смена"].unique())
-    оборудование = st.sidebar.multiselect("Оборудование", df["Оборудование"].unique())
-    топливо = st.sidebar.multiselect("Топливо", df["Топливо"].unique())
 
-    # Применяем фильтры
-    filtered_df = df.copy()
+def ensure_list(x: Any):
+"""Привести значение к списку: если это строка-JSON -> распарсить, если простая строка -> [строка], если NaN -> []."""
+if pd.isna(x):
+return []
+if isinstance(x, list):
+return x
+if isinstance(x, (tuple, set)):
+return list(x)
+if isinstance(x, str):
+s = x.strip()
+# Попытка распарсить JSON-представление списка
+if s.startswith("[") and s.endswith("]"):
+try:
+return json.loads(s)
+except Exception:
+pass
+# Если строка вида 'True'/'False' или простая строка - возвращаем как единственный элемент
+return [x]
+return [x]
 
-    if len(period) == 2:
-        start, end = period
-        filtered_df = filtered_df[(filtered_df["Дата"].dt.date >= start) & (filtered_df["Дата"].dt.date <= end)]
 
-    if смена:
-        filtered_df = filtered_df[filtered_df["Смена"].isin(смена)]
-    if оборудование:
-        filtered_df = filtered_df[filtered_df["Оборудование"].isin(оборудование)]
-    if топливо:
-        filtered_df = filtered_df[filtered_df["Топливо"].isin(топливо)]
 
-    st.subheader("Отфильтрованные данные")
-    st.dataframe(filtered_df)
 
-    # -------------------
-    # Расчеты по оборудованию
-    # -------------------
-    if not filtered_df.empty:
-        results = []
+def to_bool(x: Any) -> bool:
+if isinstance(x, bool):
+return x
+if isinstance(x, (int, float)):
+return x != 0
+if isinstance(x, str):
+s = x.strip().lower()
+return s in ("true", "1", "yes", "y", "t")
+return False
 
-        # Календарный фонд (одинаков для всех)
-        days_count = (filtered_df["Дата"].dt.date.nunique())
-        T_k = days_count * 24
 
-        for equip, group in filtered_df.groupby("Оборудование"):
-            T_f = 0
-            T_sm = 0
-            T_sm_f = 0
 
-            for idx, row in group.iterrows():
-                durations = [datetime.fromisoformat(x) for x in row["ПоказателиОборудованияПоУчасткамПродолжительность"]]
-                durations_hours = [(d.hour + d.minute/60) for d in durations]
-                includes = row["ПоказателиОборудованияПоУчасткамВключенДвигатель"]
 
-                # Сумма всех продолжительностей
-                T_sm += sum(durations_hours)
-                # Сумма, когда двигатель включен
-                T_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
-                T_sm_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
-
-            # Коэффициенты
-            K_kf = T_f / T_k if T_k > 0 else 0
-            K_is_vr = T_sm_f / T_sm if T_sm > 0 else 0
-
-            results.append({
-                "Оборудование": equip,
-                "Календарный фонд (Тк), ч": round(T_k, 2),
-                "Фактическое время работы (Тф), ч": round(T_f, 2),
-                "Суммарное время (Тсм), ч": round(T_sm, 2),
-                "Рабочее время в смене (Тсмф), ч": round(T_sm_f, 2),
-                "Коэф. использования календарного фонда (Ккф)": round(K_kf, 3),
-                "Коэф. использования по времени (Кисвр)": round(K_is_vr, 3),
-            })
-
-        results_df = pd.DataFrame(results)
-
-        st.subheader("📈 Расчеты по оборудованию")
-        st.dataframe(results_df)
-
-    else:
-        st.warning("Нет данных для выбранных фильтров")
+def duration_hours_from_item(item: Any) -> float:
+"""Попытаться получить часы из разных форматов:
+- число -> считаем как часы
+- строка формата '0001-01-01T05:00:00' -> используем время (5ч)
+- строка формата 'HH:MM:SS' -> перевод в часы
+- строка с дробным числом -> float
+В остальных случаях возвращаем 0.0
+"""
+if item is None:
+return 0.0
+# числовой
+if isinstance(item, (int, float)):
+try:
+return float(item)
+except Exception:
+return 0.0
+# строка
+if isinstance(item, str):
+s = item.strip()
+if s == "":
+return 0.0
+# iso-like with dateTtime
+try:
