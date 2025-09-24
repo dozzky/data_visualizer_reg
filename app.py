@@ -58,20 +58,33 @@ if uploaded_file:
         days_count = filtered_df["Дата"].dt.date.nunique()
         T_k = days_count * 24
 
-        # Ккф по дате и оборудованию
+        # Ккф + Тпл по дате и оборудованию
         for (equip, date), group in filtered_df.groupby(["Оборудование", filtered_df["Дата"].dt.date]):
-            T_f = 0
+            T_f = 0   # фактическое время работы
+            T_ppr = 0 # время ППР
             for _, row in group.iterrows():
                 durations = [datetime.fromisoformat(x) for x in row["ПоказателиОборудованияПоУчасткамПродолжительность"]]
                 durations_hours = [(d.hour + d.minute/60) for d in durations]
                 includes = row["ПоказателиОборудованияПоУчасткамВключенДвигатель"]
+                usage_types = row["ПоказателиОборудованияПоУчасткамВидИспользованияРабочегоВремени"]
+
+                # Фактическое время (двигатель включен)
                 T_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
-            K_kf = T_f / 24 if 24 > 0 else 0
+
+                # Время ППР
+                T_ppr += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage == "ППР"])
+
+            T_kl = 24  # календарный фонд за 1 день
+            T_pl = T_kl - T_ppr  # плановый фонд (без ППР)
+            K_kf = T_f / T_kl if T_kl > 0 else 0
+
             kkf_results.append({
                 "Оборудование": equip,
                 "Дата": date,
-                "Календарный фонд (Тк), ч": 24,
+                "Календарный фонд (Тк), ч": T_kl,
+                "Плановый фонд (Тпл), ч": round(T_pl, 2),
                 "Фактическое время работы (Тф), ч": round(T_f, 2),
+                "Время ППР (Тппр), ч": round(T_ppr, 2),
                 "Коэф. использования календарного фонда (Ккф)": round(K_kf, 3),
             })
 
