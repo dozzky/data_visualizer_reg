@@ -174,6 +174,11 @@ if uploaded_file:
             )
             st.plotly_chart(fig_avg_kkf, use_container_width=True)
 
+            avg_tpl = kkf_df.groupby("Оборудование")["Плановый фонд (Тпл), ч"].mean().reset_index()
+            avg_tpl.rename(columns={"Плановый фонд (Тпл), ч": "Среднее Тпл"}, inplace=True)
+            with st.expander("Среднее Тпл по оборудованию:"):
+                st.dataframe(avg_tpl)
+
             avg_kisvr_per_day_shift = kisvr_df.groupby(["Дата", "Смена"])["Коэф. использования по времени (Кисвр)"].mean().reset_index()
             if smoothing_window > 1:
                 avg_kisvr_per_day_shift["Сглаженное Кисвр"] = avg_kisvr_per_day_shift.groupby("Смена")["Коэф. использования по времени (Кисвр)"].transform(lambda x: x.rolling(smoothing_window, min_periods=1).mean())
