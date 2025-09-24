@@ -400,7 +400,7 @@ if uploaded_file:
             st.plotly_chart(fig_chsm, use_container_width=True)
 
             # --- График Кио ---
-            st.subheader("📈 График: Кио по дням и сменам")
+            st.subheader("📈 График: Кио по дням")
             kio_plot_df = kkf_df.copy()
             if smoothing_window > 1:
                 kio_plot_df["Сглаженный Кио"] = kio_plot_df.groupby(["Оборудование"])["Коэф. использования рабочего фонда (Кио)"].transform(
@@ -421,7 +421,7 @@ if uploaded_file:
             st.plotly_chart(fig_kio, use_container_width=True)
 
             # --- График Ктг ---
-            st.subheader("📈 График: Ктг по дням и сменам")
+            st.subheader("📈 График: Ктг по дням")
             ktg_plot_df = kkf_df.copy()
             if smoothing_window > 1:
                 ktg_plot_df["Сглаженный Ктг"] = ktg_plot_df.groupby(["Оборудование"])["Коэф. технической готовности (Ктг)"].transform(
