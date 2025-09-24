@@ -88,16 +88,32 @@ if uploaded_file:
                 "Коэф. использования календарного фонда (Ккф)": round(K_kf, 3),
             })
 
-        # Кисвр по дате, смене и оборудованию
+        # Кисвр + Тчсм по дате, смене и оборудованию
         for (equip, shift, date), group in filtered_df.groupby(["Оборудование", "Смена", filtered_df["Дата"].dt.date]):
             T_sm = 0
             T_sm_f = 0
+            T_pzo = T_ob = T_ln = T_reg = 0
             for _, row in group.iterrows():
                 durations = [datetime.fromisoformat(x) for x in row["ПоказателиОборудованияПоУчасткамПродолжительность"]]
                 durations_hours = [(d.hour + d.minute/60) for d in durations]
                 includes = row["ПоказателиОборудованияПоУчасткамВключенДвигатель"]
+                usage_types = row["ПоказателиОборудованияПоУчасткамВидИспользованияРабочегоВремени"]
+
+                # Суммарное время в смене
                 T_sm += sum(durations_hours)
+
+                # Фактическое время (двигатель включен)
                 T_sm_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
+
+                # Разбивка по видам времени
+                T_pzo += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage == "ЕО"])
+                T_ob  += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage == "Обед"])
+                T_ln  += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage == "Личные надобности"])
+                T_reg += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage in ["Выдача путевого листа", "Заправка"]])
+
+            # Чистое время работы в смену
+            T_chsm = T_sm - T_pzo - T_ob - T_ln - T_reg
+
             K_is_vr = T_sm_f / T_sm if T_sm > 0 else 0
             kisvr_results.append({
                 "Оборудование": equip,
@@ -105,6 +121,7 @@ if uploaded_file:
                 "Дата": date,
                 "Суммарное время (Тсм), ч": round(T_sm, 2),
                 "Рабочее время в смене (Тсмф), ч": round(T_sm_f, 2),
+                "Чистое время работы в смену (Тчсм), ч": round(T_chsm, 2),
                 "Коэф. использования по времени (Кисвр)": round(K_is_vr, 3),
             })
 
@@ -145,7 +162,7 @@ if uploaded_file:
             avg_shift = round(avg_shift, 3) if not pd.isna(avg_shift) else 0
             cols_avg[i+2].metric(f"Среднее значение Кисвр по {shift}", avg_shift)
 
-        cols_extra = st.columns(2)
+        cols_extra = st.columns(3)
         
         # Суммарное время ППР за выбранный период
         total_ppr = round(kkf_df["Время ППР (Тппр), ч"].sum(), 2)
@@ -154,6 +171,10 @@ if uploaded_file:
         # Среднее значение Тпл
         avg_tpl = round(kkf_df["Плановый фонд (Тпл), ч"].mean(), 2)
         cols_extra[1].metric("Среднее значение Тпл", avg_tpl)
+
+        # Среднее значение Тчсм
+        avg_chsm = round(kisvr_df["Чистое время работы в смену (Тчсм), ч"].mean(), 2)
+        cols_extra[2].metric("Среднее значение Тчсм", avg_chsm)
         
         st.subheader("📅 Вывести графики по дням")
         col_graphs = st.columns(2)
@@ -172,6 +193,7 @@ if uploaded_file:
                 title=f"Среднее Ккф по дням (сглаживание: {smoothing_window} дней)",
                 labels={"Сглаженное Ккф": "Среднее Ккф"}
             )
+            st.subheader("📈 График: Ккф по дням (среднее)")
             st.plotly_chart(fig_avg_kkf, use_container_width=True)
 
             # --- График Тпл по дням ---
@@ -189,6 +211,7 @@ if uploaded_file:
                 title=f"Среднее Тпл по дням (сглаживание: {smoothing_window} дней)",
                 labels={"Сглаженное Тпл": "Среднее Тпл"}
             )
+            st.subheader("📈 График: Тпл (плановый фонд) по дням (среднее)")
             st.plotly_chart(fig_avg_tpl, use_container_width=True)
 
             avg_kisvr_per_day_shift = kisvr_df.groupby(["Дата", "Смена"])["Коэф. использования по времени (Кисвр)"].mean().reset_index()
@@ -206,7 +229,26 @@ if uploaded_file:
                 title=f"Среднее Кисвр по дням и сменам (сглаживание: {smoothing_window} дней)",
                 labels={"Сглаженное Кисвр": "Среднее Кисвр"}
             )
+            st.subheader("📈 График: Кисвр по дням (среднее)")
             st.plotly_chart(fig_avg_kisvr, use_container_width=True)
+
+            # --- График Тчсм по дням ---
+            avg_chsm_per_day = kisvr_df.groupby("Дата")["Чистое время работы в смену (Тчсм), ч"].mean().reset_index()
+            if smoothing_window > 1:
+                avg_chsm_per_day["Сглаженное Тчсм"] = avg_chsm_per_day["Чистое время работы в смену (Тчсм), ч"].rolling(smoothing_window, min_periods=1).mean()
+            else:
+                avg_chsm_per_day["Сглаженное Тчсм"] = avg_chsm_per_day["Чистое время работы в смену (Тчсм), ч"]
+
+            fig_avg_chsm = px.line(
+                avg_chsm_per_day,
+                x="Дата",
+                y="Сглаженное Тчсм",
+                markers=True,
+                title=f"Среднее Тчсм по дням (сглаживание: {smoothing_window} дней)",
+                labels={"Сглаженное Тчсм": "Среднее Тчсм"}
+            )
+            st.subheader("📈 График: Тчсм по дням (среднее)")
+            st.plotly_chart(fig_avg_chsm, use_container_width=True)
         
         if col_graphs[1].button("Построить графики по оборудованию"):
             st.subheader("📈 График: Ккф по дням")
@@ -263,6 +305,27 @@ if uploaded_file:
                 title=f"Динамика Кисвр по дням и сменам (сглаживание: {smoothing_window} дней)"
             )
             st.plotly_chart(fig_kisvr, use_container_width=True)
+
+            st.subheader("📈 График: Тчсм по дням и сменам")
+            chsm_plot_df = kisvr_df.copy()
+            if smoothing_window > 1:
+                chsm_plot_df["Сглаженное Тчсм"] = chsm_plot_df.groupby(["Оборудование", "Смена"])["Чистое время работы в смену (Тчсм), ч"].transform(
+                    lambda x: x.rolling(smoothing_window, min_periods=1).mean()
+                )
+            else:
+                chsm_plot_df["Сглаженное Тчсм"] = chsm_plot_df["Чистое время работы в смену (Тчсм), ч"]
+
+            fig_chsm = px.line(
+                chsm_plot_df,
+                x="Дата",
+                y="Сглаженное Тчсм",
+                color="Оборудование",
+                line_dash="Смена",
+                markers=True,
+                title=f"Динамика Тчсм по дням и сменам (сглаживание: {smoothing_window} дней)",
+                labels={"Сглаженное Тчсм": "Тчсм"}
+            )
+            st.plotly_chart(fig_chsm, use_container_width=True)
 
     else:
         st.warning("Нет данных для выбранных фильтров")
