@@ -58,10 +58,12 @@ if uploaded_file:
         days_count = filtered_df["Дата"].dt.date.nunique()
         T_k = days_count * 24
 
-        # Ккф + Тпл по дате и оборудованию
+        # Ккф + Тпл + Кио + Ктг по дате и оборудованию
         for (equip, date), group in filtered_df.groupby(["Оборудование", filtered_df["Дата"].dt.date]):
             T_f = 0   # фактическое время работы
             T_ppr = 0 # время ППР
+            T_pzo = T_ob = T_ln = T_reg = T_rem = 0
+
             for _, row in group.iterrows():
                 durations = [datetime.fromisoformat(x) for x in row["ПоказателиОборудованияПоУчасткамПродолжительность"]]
                 durations_hours = [(d.hour + d.minute/60) for d in durations]
@@ -71,12 +73,35 @@ if uploaded_file:
                 # Фактическое время (двигатель включен)
                 T_f += sum([dur for dur, inc in zip(durations_hours, includes) if inc])
 
-                # Время ППР
+                # ППР
                 T_ppr += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage == "ППР"])
 
-            T_kl = 24  # календарный фонд за 1 день
-            T_pl = T_kl - T_ppr  # плановый фонд (без ППР)
+                # Для Кио
+                T_pzo += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage == "ЕО"])
+                T_ob  += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage == "Обед"])
+                T_ln  += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage == "Личные надобности"])
+                T_reg += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage in ["Выдача путевого листа", "Заправка"]])
+
+                # Для Ктг (ремонтные состояния)
+                T_rem += sum([dur for dur, usage in zip(durations_hours, usage_types) if usage in [
+                    "Аварийный ремонт оборудования узлов и агрегатов",
+                    "Обкатка ДВС",
+                    "ТО",
+                    "Ремонт",
+                    "ППР"
+                ]])
+
+            T_kl = 24  # календарный фонд за день
+            T_pl = T_kl - T_ppr  # плановый фонд
             K_kf = T_f / T_kl if T_kl > 0 else 0
+
+            # Кио
+            denom_ki = T_kl - T_pzo - T_ob - T_ln - T_reg
+            K_io = T_f / denom_ki if denom_ki > 0 else 0
+
+            # Ктг
+            denom_ktg = T_kl - T_ob - T_ln
+            K_tg = (denom_ktg - T_rem) / denom_ktg if denom_ktg > 0 else 0
 
             kkf_results.append({
                 "Оборудование": equip,
@@ -86,6 +111,8 @@ if uploaded_file:
                 "Фактическое время работы (Тф), ч": round(T_f, 2),
                 "Время ППР (Тппр), ч": round(T_ppr, 2),
                 "Коэф. использования календарного фонда (Ккф)": round(K_kf, 3),
+                "Коэф. использования рабочего фонда (Кио)": round(K_io, 3),
+                "Коэф. технической готовности (Ктг)": round(K_tg, 3),
             })
 
         # Кисвр + Тчсм по дате, смене и оборудованию
@@ -162,7 +189,7 @@ if uploaded_file:
             avg_shift = round(avg_shift, 3) if not pd.isna(avg_shift) else 0
             cols_avg[i+2].metric(f"Среднее значение Кисвр по {shift}", avg_shift)
 
-        cols_extra = st.columns(3)
+        cols_extra = st.columns(5)
         
         # Суммарное время ППР за выбранный период
         total_ppr = round(kkf_df["Время ППР (Тппр), ч"].sum(), 2)
@@ -175,6 +202,14 @@ if uploaded_file:
         # Среднее значение Тчсм
         avg_chsm = round(kisvr_df["Чистое время работы в смену (Тчсм), ч"].mean(), 2)
         cols_extra[2].metric("Среднее значение Тчсм", avg_chsm)
+
+        # Среднее значение Кио
+        avg_kio = round(kkf_df["Коэф. использования рабочего фонда (Кио)"].mean(), 3)
+        cols_extra[3].metric("Среднее значение Кио", avg_kio)
+
+        # Среднее значение Ктг
+        avg_ktg = round(kkf_df["Коэф. технической готовности (Ктг)"].mean(), 3)
+        cols_extra[4].metric("Среднее значение Ктг", avg_ktg)
         
         st.subheader("📅 Вывести графики по дням")
         col_graphs = st.columns(2)
@@ -249,6 +284,43 @@ if uploaded_file:
             )
             st.subheader("📈 График: Тчсм по дням (среднее)")
             st.plotly_chart(fig_avg_chsm, use_container_width=True)
+
+            # --- График Кио по дням ---
+            avg_kio_per_day = kkf_df.groupby("Дата")["Коэф. использования рабочего фонда (Кио)"].mean().reset_index()
+            if smoothing_window > 1:
+                avg_kio_per_day["Сглаженный Кио"] = avg_kio_per_day["Коэф. использования рабочего фонда (Кио)"].rolling(smoothing_window, min_periods=1).mean()
+            else:
+                avg_kio_per_day["Сглаженный Кио"] = avg_kio_per_day["Коэф. использования рабочего фонда (Кио)"]
+
+            fig_avg_kio = px.line(
+                avg_kio_per_day,
+                x="Дата",
+                y="Сглаженный Кио",
+                markers=True,
+                title=f"Среднее Кио по дням (сглаживание: {smoothing_window} дней)",
+                labels={"Сглаженный Кио": "Кио"}
+            )
+            st.subheader("📈 График: Кио по дням (среднее)")
+            st.plotly_chart(fig_avg_kio, use_container_width=True)
+
+            # --- График Ктг по дням ---
+            avg_ktg_per_day = kkf_df.groupby("Дата")["Коэф. технической готовности (Ктг)"].mean().reset_index()
+            if smoothing_window > 1:
+                avg_ktg_per_day["Сглаженный Ктг"] = avg_ktg_per_day["Коэф. технической готовности (Ктг)"].rolling(smoothing_window, min_periods=1).mean()
+            else:
+                avg_ktg_per_day["Сглаженный Ктг"] = avg_ktg_per_day["Коэф. технической готовности (Ктг)"]
+
+            fig_avg_ktg = px.line(
+                avg_ktg_per_day,
+                x="Дата",
+                y="Сглаженный Ктг",
+                markers=True,
+                title=f"Среднее Ктг по дням (сглаживание: {smoothing_window} дней)",
+                labels={"Сглаженный Ктг": "Ктг"}
+            )
+            st.subheader("📈 График: Ктг по дням (среднее)")
+            st.plotly_chart(fig_avg_ktg, use_container_width=True)
+            
         
         if col_graphs[1].button("Построить графики по оборудованию"):
             st.subheader("📈 График: Ккф по дням")
@@ -326,6 +398,48 @@ if uploaded_file:
                 labels={"Сглаженное Тчсм": "Тчсм"}
             )
             st.plotly_chart(fig_chsm, use_container_width=True)
+
+            # --- График Кио ---
+            st.subheader("📈 График: Кио по дням и сменам")
+            kio_plot_df = kkf_df.copy()
+            if smoothing_window > 1:
+                kio_plot_df["Сглаженный Кио"] = kio_plot_df.groupby(["Оборудование"])["Коэф. использования рабочего фонда (Кио)"].transform(
+                    lambda x: x.rolling(smoothing_window, min_periods=1).mean()
+                )
+            else:
+                kio_plot_df["Сглаженный Кио"] = kio_plot_df["Коэф. использования рабочего фонда (Кио)"]
+
+            fig_kio = px.line(
+                kio_plot_df,
+                x="Дата",
+                y="Сглаженный Кио",
+                color="Оборудование",
+                markers=True,
+                title=f"Динамика Кио по дням и оборудованию (сглаживание: {smoothing_window} дней)",
+                labels={"Сглаженный Кио": "Кио"}
+            )
+            st.plotly_chart(fig_kio, use_container_width=True)
+
+            # --- График Ктг ---
+            st.subheader("📈 График: Ктг по дням и сменам")
+            ktg_plot_df = kkf_df.copy()
+            if smoothing_window > 1:
+                ktg_plot_df["Сглаженный Ктг"] = ktg_plot_df.groupby(["Оборудование"])["Коэф. технической готовности (Ктг)"].transform(
+                    lambda x: x.rolling(smoothing_window, min_periods=1).mean()
+                )
+            else:
+                ktg_plot_df["Сглаженный Ктг"] = ktg_plot_df["Коэф. технической готовности (Ктг)"]
+
+            fig_ktg = px.line(
+                ktg_plot_df,
+                x="Дата",
+                y="Сглаженный Ктг",
+                color="Оборудование",
+                markers=True,
+                title=f"Динамика Ктг по дням и оборудованию (сглаживание: {smoothing_window} дней)",
+                labels={"Сглаженный Ктг": "Ктг"}
+            )
+            st.plotly_chart(fig_ktg, use_container_width=True)
 
     else:
         st.warning("Нет данных для выбранных фильтров")
