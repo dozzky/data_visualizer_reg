@@ -174,10 +174,22 @@ if uploaded_file:
             )
             st.plotly_chart(fig_avg_kkf, use_container_width=True)
 
-            avg_tpl = kkf_df.groupby("Оборудование")["Плановый фонд (Тпл), ч"].mean().reset_index()
-            avg_tpl.rename(columns={"Плановый фонд (Тпл), ч": "Среднее Тпл"}, inplace=True)
-            with st.expander("Среднее Тпл по оборудованию:"):
-                st.dataframe(avg_tpl)
+            # --- График Тпл по дням ---
+            avg_tpl_per_day = kkf_df.groupby("Дата")["Плановый фонд (Тпл), ч"].mean().reset_index()
+            if smoothing_window > 1:
+                avg_tpl_per_day["Сглаженное Тпл"] = avg_tpl_per_day["Плановый фонд (Тпл), ч"].rolling(smoothing_window, min_periods=1).mean()
+            else:
+                avg_tpl_per_day["Сглаженное Тпл"] = avg_tpl_per_day["Плановый фонд (Тпл), ч"]
+
+            fig_avg_tpl = px.line(
+                avg_tpl_per_day,
+                x="Дата",
+                y="Сглаженное Тпл",
+                markers=True,
+                title=f"Среднее Тпл по дням (сглаживание: {smoothing_window} дней)",
+                labels={"Сглаженное Тпл": "Среднее Тпл"}
+            )
+            st.plotly_chart(fig_avg_tpl, use_container_width=True)
 
             avg_kisvr_per_day_shift = kisvr_df.groupby(["Дата", "Смена"])["Коэф. использования по времени (Кисвр)"].mean().reset_index()
             if smoothing_window > 1:
