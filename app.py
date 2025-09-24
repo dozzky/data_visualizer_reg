@@ -144,7 +144,17 @@ if uploaded_file:
             avg_shift = kisvr_df[kisvr_df["Смена"] == shift]["Коэф. использования по времени (Кисвр)"].mean()
             avg_shift = round(avg_shift, 3) if not pd.isna(avg_shift) else 0
             cols_avg[i+2].metric(f"Среднее значение Кисвр по {shift}", avg_shift)
-            
+
+        cols_extra = st.columns(2)
+        
+        # Суммарное время ППР за выбранный период
+        total_ppr = round(kkf_df["Время ППР (Тппр), ч"].sum(), 2)
+        cols_extra[0].metric("Суммарное время ППР (Тппр)", total_ppr)
+
+        # Среднее значение Тпл
+        avg_tpl = round(kkf_df["Плановый фонд (Тпл), ч"].mean(), 2)
+        cols_extra[1].metric("Среднее значение Тпл", avg_tpl)
+        
         st.subheader("📅 Вывести графики по дням")
         col_graphs = st.columns(2)
         if col_graphs[0].button("Построить графики (среднее значение)"):
@@ -198,6 +208,26 @@ if uploaded_file:
                 title=f"Динамика Ккф по дням (сглаживание: {smoothing_window} дней)"
             )
             st.plotly_chart(fig_kkf, use_container_width=True)
+
+            st.subheader("📈 График: Тпл (плановый фонд) по дням и оборудованию")
+            tpl_plot_df = kkf_df.copy()
+            if smoothing_window > 1:
+                tpl_plot_df["Сглаженное Тпл"] = tpl_plot_df.groupby("Оборудование")["Плановый фонд (Тпл), ч"].transform(
+                    lambda x: x.rolling(smoothing_window, min_periods=1).mean()
+                )
+            else:
+                tpl_plot_df["Сглаженное Тпл"] = tpl_plot_df["Плановый фонд (Тпл), ч"]
+
+            fig_tpl = px.line(
+                tpl_plot_df,
+                x="Дата",
+                y="Сглаженное Тпл",
+                color="Оборудование",
+                markers=True,
+                title=f"Динамика Тпл по дням (сглаживание: {smoothing_window} дней)",
+                labels={"Сглаженное Тпл": "Тпл"}
+            )
+            st.plotly_chart(fig_tpl, use_container_width=True)
 
             st.subheader("📈 График: Кисвр по дням и сменам")
             kisvr_plot_df = kisvr_df.copy()
